@@ -1,0 +1,92 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  SKYLINE_ZIP_URL: "https://github.com/crackheadakira/skyline/releases/download/release/skyline_logging.zip"
+  CARGO_SKYLINE_VERSION: "3.5.0"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-skyline
+        run: cargo install cargo-skyline --version "${CARGO_SKYLINE_VERSION}" --locked
+
+      - name: Build plugin (.nro)
+        timeout-minutes: 30
+        run: python3 .github/skyline-build.py cargo skyline build --release
+
+      - name: Read project metadata
+        id: meta
+        run: |
+          CRATE=$(grep -m1 '^name' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')
+          TITLE_ID=$(grep -m1 'titleid' Cargo.toml | sed -E 's/.*"([0-9A-Fa-f]+)".*/\1/')
+          echo "crate=$CRATE"       >> "$GITHUB_OUTPUT"
+          echo "title_id=$TITLE_ID" >> "$GITHUB_OUTPUT"
+          echo "Crate: $CRATE | Title ID: $TITLE_ID"
+
+      - name: Assemble mod folder
+        id: pack
+        run: |
+          set -euo pipefail
+          CRATE="${{ steps.meta.outputs.crate }}"
+          TITLE_ID="${{ steps.meta.outputs.title_id }}"
+          NRO="target/aarch64-skyline-switch/release/lib${CRATE}.nro"
+
+          test -f "$NRO" || { echo "::error::Built NRO not found at $NRO"; exit 1; }
+
+          MOD="dist/${CRATE}"
+          mkdir -p "$MOD/exefs" "$MOD/romfs/skyline/plugins"
+
+          curl -fsSL -o skyline.zip "${SKYLINE_ZIP_URL}"
+          unzip -o -j skyline.zip "exefs/main.npdm" "exefs/subsdk9" -d "$MOD/exefs"
+          test -f "$MOD/exefs/main.npdm"
+          test -f "$MOD/exefs/subsdk9"
+
+          cp "$NRO" "$MOD/romfs/skyline/plugins/lib${CRATE}.nro"
+
+          echo "Mod folder layout:"
+          find dist -type f
+
+          ZIP="${CRATE}-${GITHUB_REF_NAME}.zip"
+          ( cd dist && zip -r "../${ZIP}" "${CRATE}" )
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.crate }}-mod
+          path: ${{ steps.pack.outputs.zip }}
+
+      - name: Generate changelog
+        id: changelog
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: CHANGELOG.md
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.pack.outputs.zip }}
+          body: ${{ steps.changelog.outputs.content }}
