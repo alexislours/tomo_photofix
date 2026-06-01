@@ -142,12 +142,24 @@ unsafe fn save_screenshot_hook(
         }
     }
 
-    original!()(image, size, image_size, report_option)
+    #[cfg(not(feature = "no_forward"))]
+    {
+        original!()(image, size, image_size, report_option)
+    }
+
+    #[cfg(feature = "no_forward")]
+    {
+        let _ = (image_size, report_option);
+        0
+    }
 }
 
 #[skyline::main(name = "tomo_photofix")]
 pub fn main() {
+    #[cfg(not(feature = "no_forward"))]
     println!("[photofix] loaded — hooking nn::album::SaveScreenshot, PNGs -> {}", OUT_DIR);
+    #[cfg(feature = "no_forward")]
+    println!("[photofix] loaded (no-forward/emulator build) — hooking nn::album::SaveScreenshot, PNGs -> {}", OUT_DIR);
     match std::fs::create_dir_all(OUT_DIR) {
         Ok(()) => println!("[photofix] output dir ready: {}", OUT_DIR),
         Err(e) => println!("[photofix] WARNING: could not create {}: {:?}", OUT_DIR, e),

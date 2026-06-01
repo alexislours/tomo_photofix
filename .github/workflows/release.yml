@@ -28,10 +28,6 @@ jobs:
       - name: Install cargo-skyline
         run: cargo install cargo-skyline --version "${CARGO_SKYLINE_VERSION}" --locked
 
-      - name: Build plugin (.nro)
-        timeout-minutes: 30
-        run: python3 .github/skyline-build.py cargo skyline build --release
-
       - name: Read project metadata
         id: meta
         run: |
@@ -41,38 +37,53 @@ jobs:
           echo "title_id=$TITLE_ID" >> "$GITHUB_OUTPUT"
           echo "Crate: $CRATE | Title ID: $TITLE_ID"
 
-      - name: Assemble mod folder
+      - name: Build & package both variants
         id: pack
+        timeout-minutes: 30
         run: |
           set -euo pipefail
           CRATE="${{ steps.meta.outputs.crate }}"
-          TITLE_ID="${{ steps.meta.outputs.title_id }}"
           NRO="target/aarch64-skyline-switch/release/lib${CRATE}.nro"
 
-          test -f "$NRO" || { echo "::error::Built NRO not found at $NRO"; exit 1; }
-
-          MOD="dist/${CRATE}"
-          mkdir -p "$MOD/exefs" "$MOD/romfs/skyline/plugins"
-
           curl -fsSL -o skyline.zip "${SKYLINE_ZIP_URL}"
-          unzip -o -j skyline.zip "exefs/main.npdm" "exefs/subsdk9" -d "$MOD/exefs"
-          test -f "$MOD/exefs/main.npdm"
-          test -f "$MOD/exefs/subsdk9"
 
-          cp "$NRO" "$MOD/romfs/skyline/plugins/lib${CRATE}.nro"
+          ZIPS=()
 
-          echo "Mod folder layout:"
+          build_variant() {
+            local suffix="$1"; shift
+            local feature_args=("$@")
+            local name="${CRATE}${suffix}"
+
+            echo "::group::Building variant ${name} (cargo skyline build --release ${feature_args[*]})"
+            python3 .github/skyline-build.py cargo skyline build --release "${feature_args[@]}"
+            test -f "$NRO" || { echo "::error::Built NRO not found at $NRO"; exit 1; }
+
+            local mod="dist/${name}"
+            mkdir -p "$mod/exefs" "$mod/romfs/skyline/plugins"
+            unzip -o -j skyline.zip "exefs/main.npdm" "exefs/subsdk9" -d "$mod/exefs"
+            test -f "$mod/exefs/main.npdm"
+            test -f "$mod/exefs/subsdk9"
+            cp "$NRO" "$mod/romfs/skyline/plugins/lib${CRATE}.nro"
+
+            local zip="${name}-${GITHUB_REF_NAME}.zip"
+            ( cd dist && zip -r "../${zip}" "${name}" )
+            ZIPS+=("$zip")
+            echo "::endgroup::"
+          }
+
+          build_variant ""
+          build_variant "-emulator"  --features no_forward
+
+          echo "Build output:"
           find dist -type f
 
-          ZIP="${CRATE}-${GITHUB_REF_NAME}.zip"
-          ( cd dist && zip -r "../${ZIP}" "${CRATE}" )
-          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+          { echo "zips<<EOF"; printf '%s\n' "${ZIPS[@]}"; echo "EOF"; } >> "$GITHUB_OUTPUT"
 
-      - name: Upload build artifact
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.meta.outputs.crate }}-mod
-          path: ${{ steps.pack.outputs.zip }}
+          path: ${{ steps.pack.outputs.zips }}
 
       - name: Generate changelog
         id: changelog
@@ -88,5 +99,5 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.pack.outputs.zip }}
+          files: ${{ steps.pack.outputs.zips }}
           body: ${{ steps.changelog.outputs.content }}

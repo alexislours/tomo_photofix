@@ -1,6 +1,6 @@
 [package]
 name = "tomo_photofix"
-version = "1.0.0"
+version = "1.1.0"
 authors = ["Alexis Lours"]
 edition = "2021"
 license = "GPL-3.0-or-later"
@@ -10,6 +10,10 @@ titleid = "010051F0207B2000" # Tomodachi Life: Living the Dream
 
 [lib]
 crate-type = ["cdylib"]
+
+[features]
+default = []
+no_forward = []
 
 [dependencies]
 skyline = "0.6.0"
