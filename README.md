@@ -19,12 +19,12 @@ Photos are written to `tomo_photofix/photo_<timestamp>.png` on the (virtual) SD 
 
 Each release ships two builds. Install **one** of them, not both:
 
-| Download                               | When to use it                                                                                                                        |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `tomo_photofix-<version>.zip`          | Real consoles and emulators with working `nn::album` support. Saves the PNG **and** forwards to the system album.                     |
-| `tomo_photofix-emulator-<version>.zip` | Emulators that crash when saving a photo. Saves the PNG but skips the `nn::album` call that those emulators don't implement properly. |
+| Download                               | What it does                                                                                                                                                                      |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tomo_photofix-<version>.zip`          | Saves the PNG **and** forwards to `nn::album`, so the photo also lands in the system album.                                                                                       |
+| `tomo_photofix-emulator-<version>.zip` | Saves the PNG only, skipping the `nn::album` call. Removes the duplicate save into the system album, and avoids the crash on emulators that don't implement `nn::album` properly. |
 
-If photos save fine on the standard build, stick with it. Only switch to the `-emulator` build if your emulator crashes the moment a photo is taken.
+Both builds run on real consoles and emulators, pick based on whether you want the photo in the system album. The standard build keeps that copy; the `-emulator` build drops it (just the PNG on the SD card) and is the one to use if your emulator crashes the moment a photo is taken.
 
 ## Installation
 
