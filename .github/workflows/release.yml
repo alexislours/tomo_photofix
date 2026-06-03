@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 env:
-  SKYLINE_ZIP_URL: "https://github.com/crackheadakira/skyline/releases/download/release/skyline_logging.zip"
+  SKYLINE_ZIP_URL: "https://github.com/tlmodding/skyline-ltd/releases/download/v1.0.0/skyline.zip"
   CARGO_SKYLINE_VERSION: "3.5.0"
 
 jobs:
